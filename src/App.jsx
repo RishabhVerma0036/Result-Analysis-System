@@ -1,44 +1,52 @@
 import { useState, useEffect, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
-
-// Firebase Imports
 import { auth, db } from "./firebase";
 import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 
 import LoginScreen from "./components/auth/LoginScreen";
 
-// 🚀 DYNAMIC IMPORTS: These pages are only downloaded when needed!
 const StudentPage = lazy(() => import("./pages/StudentPage"));
-const TeacherPage = lazy(() => import("./pages/TeacherPage"));
-
-import { initialStudents } from "./data/students";
-import { initialCurriculum } from "./data/curriculum";
+const AdminPage = lazy(() => import("./pages/TeacherPage"));
 
 function App() {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  
-  const [studentsData, setStudentsData] = useState(initialStudents);
-  const [curriculum, setCurriculum] = useState(initialCurriculum);
+  const [loading, setLoading] = useState(true); 
+  const [studentsData, setStudentsData] = useState([]); // Safe empty array fallback
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         try {
           const userDoc = await getDoc(doc(db, "users", currentUser.uid));
+          
           if (userDoc.exists()) {
-            setUser({ id: currentUser.uid, ...userDoc.data() });
+            const userData = userDoc.data();
+            
+            // IF STUDENT: Fetch their actual marks/scorecard from the 'students' collection
+            if (userData.role === 'student') {
+              const studentDoc = await getDoc(doc(db, "students", currentUser.uid));
+              if (studentDoc.exists()) {
+                // Merge auth data with database marks
+                setUser({ id: currentUser.uid, ...userData, ...studentDoc.data() });
+              } else {
+                // Safe fallback if student doc hasn't been created yet
+                setUser({ id: currentUser.uid, ...userData, cgpa: 0, semesters: [] });
+              }
+            } else {
+              // IF ADMIN: Just set the user
+              setUser({ id: currentUser.uid, ...userData });
+            }
           } else {
-            setUser({ id: currentUser.uid, email: currentUser.email, role: "student" });
+            setUser({ id: currentUser.uid, email: currentUser.email, role: "student", cgpa: 0, semesters: [] });
           }
         } catch (error) {
-          console.error("Error fetching user role:", error);
+          console.error("Error fetching user data:", error);
         }
       } else {
         setUser(null);
       }
-      setLoading(false);
+      setLoading(false); 
     });
 
     return () => unsubscribe();
@@ -53,7 +61,7 @@ function App() {
   };
 
   if (loading) {
-    return <div className="min-h-screen flex items-center justify-center bg-gray-50">Loading Portal...</div>;
+    return <div className="min-h-screen flex items-center justify-center bg-gray-50 text-[#003366] font-bold">Loading Portal...</div>;
   }
 
   return (
@@ -61,42 +69,38 @@ function App() {
       {!user ? (
         <LoginScreen />
       ) : (
-        // 🚀 SUSPENSE: Shows a fallback while the requested page downloads
         <Suspense fallback={<div className="min-h-screen flex items-center justify-center bg-gray-50">Loading interface...</div>}>
           <Routes>
-            {/* STUDENT */}
+            {/* STUDENT ROUTE */}
             {user.role === "student" && (
               <Route
                 path="/"
                 element={
                   <StudentPage
-                    student={studentsData.find((s) => s.id === user.id) || studentsData[0] || {}}
+                    student={user} // Directly pass the Firebase user data (No more .find!)
                     onLogout={handleLogout}
-                    setStudentsData={setStudentsData}
                   />
                 }
               />
             )}
 
-            {/* TEACHER */}
-            {user.role === "teacher" && (
+            {/* ADMIN ROUTE */}
+            {(user.role === "admin" || user.role === "teacher") && (
               <Route
-                path="/teacher"
+                path="/admin"
                 element={
-                  <TeacherPage
+                  <AdminPage
                       user={user}
                       onLogout={handleLogout}
                       students={studentsData}
                       setStudents={setStudentsData}
-                      curriculum={curriculum}
-                      setCurriculum={setCurriculum}
                   />
                 }
               />
             )}
 
             {/* REDIRECT */}
-            <Route path="*" element={<Navigate to={user.role === "teacher" ? "/teacher" : "/"} />} />
+            <Route path="*" element={<Navigate to={(user.role === "admin" || user.role === "teacher") ? "/admin" : "/"} />} />
           </Routes>
         </Suspense>
       )}

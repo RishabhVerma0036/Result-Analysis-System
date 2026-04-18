@@ -14,7 +14,7 @@ const StudentPage = ({ student, onLogout, setStudentsData }) => {
   const menuItems = [
     { id: 'dashboard', label: 'Overview', icon: LayoutDashboard },
     { id: 'calculator', label: 'SGPA Estimator', icon: Calculator },
-    { id: 'predictor', label: 'Target Predictor', icon: Target },
+    { id: 'predictor', label: 'CGPA Estimator', icon: Target }, // RENAMED HERE
     { id: 'profile', label: 'My Record', icon: User },
   ];
 
@@ -28,7 +28,8 @@ const StudentPage = ({ student, onLogout, setStudentsData }) => {
         <main className="flex-1 overflow-y-auto bg-gray-100/50">
           <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
             {activeTab === 'dashboard' && <StudentDashboard student={student} setStudentsData={setStudentsData} />}
-            {activeTab === 'calculator' && <StudentCalculator />}
+            {/* PASSING STUDENT PROP DOWN HERE */}
+            {activeTab === 'calculator' && <StudentCalculator student={student} />} 
             {activeTab === 'predictor' && <StudentPredictor student={student} />}
             {activeTab === 'profile' && <StudentProfile student={student} user={student} />}
           </div>

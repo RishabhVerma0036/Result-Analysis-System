@@ -1,105 +1,168 @@
 import { useState } from "react";
-import { User, Plus } from "lucide-react";
-import AlertMessage from "../common/AlertMessage";
+import { Upload, Save, Edit } from "lucide-react";
+import { db, firebaseConfig } from "../../firebase";
+import { doc, setDoc } from "firebase/firestore";
+// Secondary App for Auth to prevent logging Admin out
+import { initializeApp } from "firebase/app";
+import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 
-const TeacherDataManagement = ({ students, setStudents, curriculum, setRegisteredUsers }) => {
-  const [formData, setFormData] = useState({ roll: '', name: '', email: '', classStr: Object.keys(curriculum)[0] || '', section: 'A', currentSem: '1' });
+// Initialize a secondary app just for creating users
+const secondaryApp = initializeApp(firebaseConfig, "SecondaryAppForAuth");
+const secondaryAuth = getAuth(secondaryApp);
+
+const TeacherDataManagement = ({ students, setStudents }) => {
   const [notification, setNotification] = useState(null);
+  const [importedData, setImportedData] = useState([]);
+  const [loading, setLoading] = useState(false);
 
-  const handleManualAdd = (e) => {
-    e.preventDefault();
-    const { roll, name, email, classStr, section, currentSem } = formData;
-    const semNum = Number(currentSem);
-    
-    const subs = curriculum[classStr]?.[semNum] || [];
-    const newSubjectsObj = {};
-    subs.forEach(sub => newSubjectsObj[sub] = { ext: 0, int: 0 });
-    
-    const newId = `STU${Date.now()}`;
-    const newStudent = {
-      id: newId,
-      roll, name, class: classStr, section, currentSem: semNum,
-      cgpa: 0, email, phone: 'Not Provided',
-      semesters: [{ sem: semNum, subjects: newSubjectsObj, sgpa: 0 }]
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const text = event.target.result;
+      const rows = text.split('\n').map(row => row.split(',').map(cell => cell?.trim()));
+      
+      const newStudents = [];
+      // Expected CSV: EnrollmentNo,Name,Email,Course,Semester,Section,Sub1Name,Sub1Ext,Sub1Int,Sub2Name...
+      for (let i = 1; i < rows.length; i++) {
+        if (rows[i].length < 6 || !rows[i][0]) continue;
+        
+        let subjectsObj = {};
+        // Start reading subjects from index 6 in chunks of 3 (Name, Ext, Int)
+        for (let j = 6; j < rows[i].length; j += 3) {
+          if (rows[i][j]) {
+            subjectsObj[rows[i][j]] = {
+              ext: Number(rows[i][j+1]) || 0,
+              int: Number(rows[i][j+2]) || 0
+            };
+          }
+        }
+
+        newStudents.push({
+          roll: rows[i][0],
+          name: rows[i][1],
+          email: rows[i][2],
+          class: rows[i][3],
+          currentSem: Number(rows[i][4]),
+          section: rows[i][5],
+          subjects: subjectsObj
+        });
+      }
+      setImportedData(newStudents);
     };
-    
-    setStudents([...students, newStudent]);
+    reader.readAsText(file);
+  };
 
-    if (setRegisteredUsers) {
-      setRegisteredUsers(prev => [...prev, {
-        id: newId,
-        name,
-        email,
-        password: 'password123', 
-        role: 'student'
-      }]);
+  const saveToDatabase = async () => {
+    setLoading(true);
+    setNotification(null);
+    let successCount = 0;
+
+    for (const stu of importedData) {
+      try {
+        // 1. Create User in Auth using secondary app
+        const userCredential = await createUserWithEmailAndPassword(secondaryAuth, stu.email, 'password1234');
+        const uid = userCredential.user.uid;
+
+        // 2. Save User Role Document
+        await setDoc(doc(db, "users", uid), {
+          name: stu.name,
+          email: stu.email,
+          role: "student"
+        });
+
+        // 3. Save to Students Collection
+        const newStudentDoc = {
+          id: uid,
+          name: stu.name,
+          email: stu.email,
+          roll: stu.roll,
+          class: stu.class,
+          section: stu.section,
+          currentSem: stu.currentSem,
+          cgpa: 0, // Calculate this properly based on your logic later
+          semesters: [{
+            sem: stu.currentSem,
+            subjects: stu.subjects,
+            sgpa: 0
+          }]
+        };
+
+        await setDoc(doc(db, "students", uid), newStudentDoc);
+        setStudents(prev => [...prev.filter(p => p.email !== stu.email), newStudentDoc]);
+        successCount++;
+        
+        // Sign out secondary auth to clear it for the next one
+        await secondaryAuth.signOut();
+
+      } catch (err) {
+        console.error("Error importing student:", stu.email, err);
+      }
     }
-    
-    setFormData({ roll: '', name: '', email: '', classStr: Object.keys(curriculum)[0] || '', section: 'A', currentSem: '1' });
-    
-    setNotification({ type: 'success', text: `Student ${name} (${roll}) registered successfully. Default login password is 'password123'.` });
-    setTimeout(() => setNotification(null), 8000);
+
+    setLoading(false);
+    setNotification({ type: 'success', text: `Successfully imported ${successCount} students.` });
+    setImportedData([]);
   };
 
   return (
-    <div className="p-4 sm:p-8 max-w-4xl mx-auto space-y-8">
-      <AlertMessage message={notification?.text} type={notification?.type} />
+    <div className="p-4 sm:p-8 max-w-6xl mx-auto space-y-6">
+      {notification && <div className="p-4 bg-green-100 text-green-800 rounded">{notification.text}</div>}
 
-      <h2 className="text-xl font-semibold text-gray-800 border-b border-gray-300 pb-2">Student Registry</h2>
+      <h2 className="text-xl font-semibold text-gray-800 border-b border-gray-300 pb-2">Student Registry (CSV Import)</h2>
       
-      <div className="bg-white border border-gray-300 rounded-sm shadow-sm p-6 sm:p-8">
-        <div className="flex items-center gap-3 border-b border-gray-200 pb-4 mb-6">
-          <div className="p-2 bg-blue-50 rounded-full text-[#003366]">
-            <User className="w-5 h-5" />
-          </div>
-          <div>
-            <h3 className="font-bold text-gray-800 text-lg">Enroll New Student</h3>
-            <p className="text-xs text-gray-500 mt-0.5">Registering a student automatically provisions their scorecard and login credentials.</p>
-          </div>
+      <div className="bg-white border p-6 rounded-sm shadow-sm">
+        <label className="block text-sm font-bold text-gray-700 mb-2">Upload CSV File</label>
+        <p className="text-xs text-gray-500 mb-4">Format: EnrollmentNo, Name, Email, Course, Sem, Section, Sub1, Sub1_Ext, Sub1_Int...</p>
+        <div className="flex items-center gap-4">
+          <input type="file" accept=".csv" onChange={handleFileUpload} className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-[#003366] hover:file:bg-blue-100" />
         </div>
-        
-        <form onSubmit={handleManualAdd} className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">Full Name</label>
-              <input type="text" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="e.g. Jane Doe" className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded focus:border-[#003366] focus:ring-1 focus:ring-[#003366] outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">Roll Number</label>
-              <input type="text" required value={formData.roll} onChange={e => setFormData({...formData, roll: e.target.value})} placeholder="e.g. CS2024-55" className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded focus:border-[#003366] focus:ring-1 focus:ring-[#003366] outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">Email Address</label>
-              <input type="email" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} placeholder="e.g. student@university.edu" className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded focus:border-[#003366] focus:ring-1 focus:ring-[#003366] outline-none" />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">Class/Major</label>
-              <select value={formData.classStr} onChange={e => setFormData({...formData, classStr: e.target.value, currentSem: Object.keys(curriculum[e.target.value] || {})[0]})} className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded focus:border-[#003366] focus:ring-1 focus:ring-[#003366] outline-none bg-white cursor-pointer">
-                {Object.keys(curriculum).map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">Semester</label>
-                <select value={formData.currentSem} onChange={e => setFormData({...formData, currentSem: e.target.value})} className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded focus:border-[#003366] focus:ring-1 focus:ring-[#003366] outline-none bg-white cursor-pointer">
-                  {(formData.classStr && curriculum[formData.classStr] ? Object.keys(curriculum[formData.classStr]) : []).map(s => <option key={s} value={s}>{s}</option>)}
-                </select>
-              </div>
-              <div className="flex-1">
-                <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">Section</label>
-                <input type="text" required value={formData.section} onChange={e => setFormData({...formData, section: e.target.value})} placeholder="e.g. A" className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded focus:border-[#003366] focus:ring-1 focus:ring-[#003366] outline-none" />
-              </div>
-            </div>
-          </div>
-          <div className="flex justify-end pt-6 border-t border-gray-100">
-            <button type="submit" className="w-full sm:w-auto bg-[#003366] text-white px-8 py-2.5 text-sm font-semibold rounded shadow hover:bg-blue-900 transition-colors flex items-center justify-center gap-2">
-              <Plus className="w-4 h-4" /> Enlist Student
+      </div>
+
+      {importedData.length > 0 && (
+        <div className="bg-white border p-6 rounded-sm shadow-sm">
+          <div className="flex justify-between items-center mb-4">
+            <h3 className="font-bold">Preview Imported Data</h3>
+            <button onClick={saveToDatabase} disabled={loading} className="bg-[#003366] text-white px-4 py-2 rounded text-sm flex gap-2 items-center">
+              <Save className="w-4 h-4" /> {loading ? "Saving to Database..." : "Save All to Firebase"}
             </button>
           </div>
-        </form>
-      </div>
+          
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-sm">
+              <thead>
+                <tr className="bg-gray-100 border-b">
+                  <th className="p-2">Roll No</th>
+                  <th className="p-2">Name</th>
+                  <th className="p-2">Email</th>
+                  <th className="p-2">Course</th>
+                  <th className="p-2">Sem</th>
+                  <th className="p-2">Subjects (Ext/Int)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {importedData.map((s, idx) => (
+                  <tr key={idx} className="border-b">
+                    <td className="p-2">{s.roll}</td>
+                    <td className="p-2">{s.name}</td>
+                    <td className="p-2">{s.email}</td>
+                    <td className="p-2">{s.class}</td>
+                    <td className="p-2">{s.currentSem}</td>
+                    <td className="p-2 text-xs">
+                      {Object.entries(s.subjects).map(([sub, marks]) => (
+                        <div key={sub}>{sub}: E({marks.ext}) I({marks.int})</div>
+                      ))}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
-
 export default TeacherDataManagement;

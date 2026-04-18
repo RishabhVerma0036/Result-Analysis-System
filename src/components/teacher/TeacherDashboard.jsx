@@ -2,28 +2,117 @@ import { useMemo, useState } from "react";
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer 
 } from 'recharts';
+import { getGrade } from "../../data/utils";
 
 const TeacherDashboard = ({ students }) => {
   const [filterClass, setFilterClass] = useState('All');
   const [filterSem, setFilterSem] = useState('All');
 
+  // --- DYNAMICALLY FETCH UNIQUE COURSES FROM DATABASE ---
+  const uniqueClasses = useMemo(() => {
+    const classes = students.map(s => s.class).filter(Boolean); // Extract all course names
+    return [...new Set(classes)].sort(); // Remove duplicates and alphabetize
+  }, [students]);
+
+  // Apply Filters
   const filteredStudents = useMemo(() => {
     let result = [...students];
     if (filterClass !== 'All') result = result.filter(s => s.class === filterClass);
     return result;
   }, [students, filterClass]);
 
+  // --- DYNAMIC CGPA CALCULATOR ---
+  const calculateStudentCgpa = (student) => {
+    let cgpaTotalPoints = 0;
+    let cgpaTotalCredits = 0;
+    const safeSemesters = student?.semesters || [];
+
+    safeSemesters.forEach(sem => {
+      if (sem.subjects) {
+        Object.values(sem.subjects).forEach(marks => {
+          const total = (Number(marks.ext) || 0) + (Number(marks.int) || 0);
+          let points = 0;
+          const gradeObj = getGrade(total);
+          
+          if (gradeObj && gradeObj.points !== undefined) points = gradeObj.points;
+          else {
+             if (total >= 90) points = 10;
+             else if (total >= 80) points = 9;
+             else if (total >= 70) points = 8;
+             else if (total >= 60) points = 7;
+             else if (total >= 50) points = 6;
+             else if (total >= 40) points = 5;
+          }
+          const credits = 3;
+          cgpaTotalPoints += points * credits;
+          cgpaTotalCredits += credits;
+        });
+      }
+    });
+
+    return cgpaTotalCredits > 0 ? (cgpaTotalPoints / cgpaTotalCredits) : 0;
+  };
+
+  // 1. CALCULATE MEAN CGPA
+  const batchAvgCgpa = useMemo(() => {
+    if (!filteredStudents.length) return "0.00";
+    const total = filteredStudents.reduce((acc, s) => acc + calculateStudentCgpa(s), 0);
+    return (total / filteredStudents.length).toFixed(2);
+  }, [filteredStudents]);
+
+  // 2. OVERALL PASS RATE (Replacing Fake YoY Delta)
+  const passRate = useMemo(() => {
+    let passedSubjects = 0;
+    let totalSubjects = 0;
+    
+    filteredStudents.forEach(student => {
+      const sems = student.semesters || [];
+      sems.forEach(sem => {
+        if (sem.subjects) {
+          Object.values(sem.subjects).forEach(marks => {
+            totalSubjects++;
+            const total = (Number(marks.ext)||0) + (Number(marks.int)||0);
+            if (total >= 40) passedSubjects++; // 40 is passing criteria
+          });
+        }
+      });
+    });
+    
+    return totalSubjects > 0 ? ((passedSubjects / totalSubjects) * 100).toFixed(1) : "0.0";
+  }, [filteredStudents]);
+
+  // 3. REAL CHART DATA (Course-wise Performance)
+  const courseChartData = useMemo(() => {
+    const courseGroups = {};
+    
+    // Group students by their course/class
+    filteredStudents.forEach(s => {
+      const courseName = s.class || 'Unassigned';
+      if (!courseGroups[courseName]) courseGroups[courseName] = { totalCgpa: 0, count: 0 };
+      
+      courseGroups[courseName].totalCgpa += calculateStudentCgpa(s);
+      courseGroups[courseName].count += 1;
+    });
+
+    // Format for Recharts
+    return Object.entries(courseGroups).map(([name, data]) => ({
+      name: name,
+      avgCgpa: Number((data.totalCgpa / data.count).toFixed(2))
+    }));
+  }, [filteredStudents]);
+
+  // 4. SUBJECT DIFFICULTY INDEX
   const difficultyStats = useMemo(() => {
     const stats = {};
     let totalAnalyzed = 0;
     filteredStudents.forEach(student => {
       let targetSemData;
       if (filterSem === 'All') {
-        targetSemData = student.semesters[student.semesters.length - 1]; // Latest
+        targetSemData = student.semesters[student.semesters.length - 1]; 
       } else {
         targetSemData = student.semesters.find(s => s.sem === Number(filterSem));
       }
-      if (targetSemData) {
+      if (targetSemData && targetSemData.subjects) {
         totalAnalyzed++;
         Object.entries(targetSemData.subjects).forEach(([subject, marks]) => {
           if (!stats[subject]) stats[subject] = { fails: 0, totalMarks: 0, count: 0 };
@@ -42,27 +131,20 @@ const TeacherDashboard = ({ students }) => {
     })).sort((a, b) => b.failRate - a.failRate);
   }, [filteredStudents, filterSem]);
 
-  const batchAvgCgpa = filteredStudents.length ? (filteredStudents.reduce((acc, s) => acc + s.cgpa, 0) / filteredStudents.length).toFixed(2) : 0;
-
-  // Mock historical data for the chart from reference
-  const yoyData = [
-    { year: '2020', avgCgpa: 7.4, passPercentage: 88 },
-    { year: '2021', avgCgpa: 7.6, passPercentage: 91 },
-    { year: '2022', avgCgpa: 7.3, passPercentage: 85 },
-    { year: '2023', avgCgpa: 7.9, passPercentage: 94 },
-    { year: '2024 (Current)', avgCgpa: 7.56, passPercentage: 89 },
-  ];
-
   return (
     <div className="p-4 sm:p-8 max-w-6xl mx-auto space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end border-b border-gray-300 pb-2 gap-4">
         <h2 className="text-xl font-semibold text-gray-800">Institutional Analytics</h2>
         <div className="flex gap-3 w-full sm:w-auto">
+          
+          {/* DYNAMIC DROPDOWN */}
           <select value={filterClass} onChange={e => setFilterClass(e.target.value)} className="flex-1 sm:flex-none border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-[#003366] bg-white min-w-[140px] shadow-sm">
-            <option value="All">All Classes</option>
-            <option value="B.Tech CS">B.Tech CS</option>
-            <option value="B.Tech IT">B.Tech IT</option>
+            <option value="All">All Courses</option>
+            {uniqueClasses.map(className => (
+               <option key={className} value={className}>{className}</option>
+            ))}
           </select>
+
           <select value={filterSem} onChange={e => setFilterSem(e.target.value)} className="flex-1 sm:flex-none border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-[#003366] bg-white min-w-[120px] shadow-sm">
             <option value="All">All / Latest Sems</option>
             {[1, 2, 3, 4, 5, 6, 7, 8].map(s => <option key={s} value={s}>Semester {s}</option>)}
@@ -80,24 +162,28 @@ const TeacherDashboard = ({ students }) => {
           <p className="text-3xl font-bold text-gray-800">{batchAvgCgpa}</p>
         </div>
         <div className="bg-white p-5 border border-gray-200 rounded-sm shadow-sm border-t-4 border-t-green-500">
-          <p className="text-xs text-gray-500 uppercase font-semibold tracking-wider mb-1">Year over Year Delta</p>
-          <p className="text-3xl font-bold text-green-600">+0.12 pts</p>
+          <p className="text-xs text-gray-500 uppercase font-semibold tracking-wider mb-1">Overall Pass Rate</p>
+          <p className={`text-3xl font-bold ${Number(passRate) >= 80 ? 'text-green-600' : 'text-yellow-600'}`}>
+            {passRate}%
+          </p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white border border-gray-300 rounded-sm shadow-sm flex flex-col">
           <div className="px-5 py-4 border-b border-gray-200 bg-gray-50">
-            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Historical Performance (Avg CGPA)</h3>
+             {/* RENAMED TO REFLECT REAL DATA */}
+            <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Course Performance Comparison</h3>
           </div>
           <div className="h-72 p-5 flex-1">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={yoyData} margin={{top: 10, right: 10, left: -20, bottom: 0}}>
+              {/* USING REAL DATA HERE */}
+              <BarChart data={courseChartData} margin={{top: 10, right: 10, left: -20, bottom: 0}}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-                <XAxis dataKey="year" tick={{fontSize: 11}} axisLine={false} tickLine={false} />
-                <YAxis domain={[5, 10]} tick={{fontSize: 11}} axisLine={false} tickLine={false} />
+                <XAxis dataKey="name" tick={{fontSize: 11}} axisLine={false} tickLine={false} />
+                <YAxis domain={[0, 10]} tick={{fontSize: 11}} axisLine={false} tickLine={false} />
                 <Tooltip cursor={{fill: '#f3f4f6'}} contentStyle={{fontSize: '12px', borderRadius: '4px'}} />
-                <Bar dataKey="avgCgpa" fill="#475569" maxBarSize={45} radius={[2, 2, 0, 0]} />
+                <Bar dataKey="avgCgpa" fill="#475569" maxBarSize={60} radius={[2, 2, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
