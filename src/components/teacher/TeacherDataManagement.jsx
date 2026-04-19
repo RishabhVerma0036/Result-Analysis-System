@@ -60,50 +60,103 @@ const TeacherDataManagement = ({ students, setStudents }) => {
     setNotification(null);
     let successCount = 0;
 
+    // Use a local copy of students to track updates during the loop
+    let currentStudents = [...students];
+
     for (const stu of importedData) {
       try {
-        // 1. Create User in Auth using secondary app
-        const userCredential = await createUserWithEmailAndPassword(secondaryAuth, stu.email, 'password1234');
-        const uid = userCredential.user.uid;
+        // Check if student already exists in the current student list
+        let existingStudent = currentStudents.find(s => s.email === stu.email || s.roll === stu.roll);
 
-        // 2. Save User Role Document
-        await setDoc(doc(db, "users", uid), {
-          name: stu.name,
-          email: stu.email,
-          role: "student"
-        });
+        if (existingStudent) {
+          // --- STUDENT EXISTS: UPDATE SEMESTER OR MARKS ---
+          const uid = existingStudent.id;
+          
+          // Copy existing semesters or default to empty array
+          let updatedSemesters = existingStudent.semesters ? [...existingStudent.semesters] : [];
+          let semIndex = updatedSemesters.findIndex(s => s.sem === stu.currentSem);
 
-        // 3. Save to Students Collection
-        const newStudentDoc = {
-          id: uid,
-          name: stu.name,
-          email: stu.email,
-          roll: stu.roll,
-          class: stu.class,
-          section: stu.section,
-          currentSem: stu.currentSem,
-          cgpa: 0, // Calculate this properly based on your logic later
-          semesters: [{
-            sem: stu.currentSem,
-            subjects: stu.subjects,
-            sgpa: 0
-          }]
-        };
+          if (semIndex !== -1) {
+            // Fix 2: Semester exists, update the subjects & marks
+            updatedSemesters[semIndex].subjects = {
+              ...updatedSemesters[semIndex].subjects,
+              ...stu.subjects // Merges new marks with existing marks
+            };
+          } else {
+            // Fix 1: New semester for existing student
+            updatedSemesters.push({
+              sem: stu.currentSem,
+              subjects: stu.subjects,
+              sgpa: 0
+            });
+          }
 
-        await setDoc(doc(db, "students", uid), newStudentDoc);
-        setStudents(prev => [...prev.filter(p => p.email !== stu.email), newStudentDoc]);
-        successCount++;
-        
-        // Sign out secondary auth to clear it for the next one
-        await secondaryAuth.signOut();
+          const updatedStudentDoc = {
+            ...existingStudent,
+            name: stu.name,
+            class: stu.class,
+            section: stu.section,
+            currentSem: stu.currentSem, 
+            semesters: updatedSemesters
+          };
+
+          // Update the database (using merge: true to be safe)
+          await setDoc(doc(db, "students", uid), updatedStudentDoc, { merge: true });
+
+          // Update our local tracking list
+          currentStudents = currentStudents.map(p => p.id === uid ? updatedStudentDoc : p);
+          successCount++;
+
+        } else {
+          // --- NEW STUDENT: CREATE AUTH AND DATABASE DOCUMENTS ---
+          
+          // 1. Create User in Auth using secondary app
+          const userCredential = await createUserWithEmailAndPassword(secondaryAuth, stu.email, 'password1234');
+          const uid = userCredential.user.uid;
+
+          // 2. Save User Role Document
+          await setDoc(doc(db, "users", uid), {
+            name: stu.name,
+            email: stu.email,
+            role: "student"
+          });
+
+          // 3. Save to Students Collection
+          const newStudentDoc = {
+            id: uid,
+            name: stu.name,
+            email: stu.email,
+            roll: stu.roll,
+            class: stu.class,
+            section: stu.section,
+            currentSem: stu.currentSem,
+            cgpa: 0, 
+            semesters: [{
+              sem: stu.currentSem,
+              subjects: stu.subjects,
+              sgpa: 0
+            }]
+          };
+
+          await setDoc(doc(db, "students", uid), newStudentDoc);
+          
+          // Add to our local tracking list
+          currentStudents.push(newStudentDoc);
+          successCount++;
+          
+          // Sign out secondary auth to clear it for the next one
+          await secondaryAuth.signOut();
+        }
 
       } catch (err) {
-        console.error("Error importing student:", stu.email, err);
+        console.error("Error processing student:", stu.email, err);
       }
     }
 
+    // Update the main state once the loop is done
+    setStudents(currentStudents);
     setLoading(false);
-    setNotification({ type: 'success', text: `Successfully imported ${successCount} students.` });
+    setNotification({ type: 'success', text: `Successfully processed ${successCount} students.` });
     setImportedData([]);
   };
 

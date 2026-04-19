@@ -112,11 +112,11 @@ const StudentDashboard = ({ student }) => {
       
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white p-4 border rounded shadow-sm">
-          <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Cumulative GPA</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wider mb-1 border-gray-300">CGPA</p>
           <p className="text-2xl font-semibold text-gray-800">{displayCgpa.toFixed(2)}</p>
         </div>
         <div className="bg-white p-4 border rounded shadow-sm">
-          <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">SGPA (Sem {currentSemData.sem})</p>
+          <p className="text-xs text-gray-500 uppercase tracking-wider mb-1  border-gray-300">SGPA (Sem {currentSemData.sem})</p>
           <p className="text-2xl font-semibold text-gray-800">{displaySgpa.toFixed(2)}</p>
         </div>
         <div className={`p-4 border rounded flex items-center gap-3 shadow-sm ${hasFailed ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
@@ -169,8 +169,8 @@ const StudentDashboard = ({ student }) => {
             <thead className="bg-white text-gray-600 border-b border-gray-300">
               <tr>
                 <th className="px-5 py-3 font-medium border-r border-gray-100">Subject</th>
-                <th className="px-5 py-3 font-medium border-r border-gray-100">External (Max 70)</th>
-                <th className="px-5 py-3 font-medium border-r border-gray-100">Internal (Max 30)</th>
+                <th className="px-5 py-3 font-medium border-r border-gray-100">External (Max 60)</th>
+                <th className="px-5 py-3 font-medium border-r border-gray-100">Internal (Max 40)</th>
                 <th className="px-5 py-3 font-medium border-r border-gray-100">Total (100)</th>
                 <th className="px-5 py-3 font-medium border-r border-gray-100">Grade</th>
                 <th className="px-5 py-3 font-medium">Remarks</th>

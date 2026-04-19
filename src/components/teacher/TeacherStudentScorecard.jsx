@@ -7,8 +7,13 @@ import { getGrade } from "../../data/utils";
 const TeacherStudentScorecard = ({ students, setStudents }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedStudent, setSelectedStudent] = useState(null);
+  
+  // States for Editing Student Info
   const [isEditing, setIsEditing] = useState(false);
   const [editForm, setEditForm] = useState({});
+
+  // States for Editing Marks
+  const [editingSubject, setEditingSubject] = useState(null); // { semIndex, subName, ext, int }
 
   // Search Filter
   const filteredStudents = useMemo(() => {
@@ -60,7 +65,8 @@ const TeacherStudentScorecard = ({ students, setStudents }) => {
   // Handlers
   const handleSelectStudent = (student) => {
     setSelectedStudent(student);
-    setIsEditing(false); // Reset edit state when switching students
+    setIsEditing(false); // Reset profile edit state
+    setEditingSubject(null); // Reset marks edit state
   };
 
   const handleEditClick = () => {
@@ -90,6 +96,48 @@ const TeacherStudentScorecard = ({ students, setStudents }) => {
     } catch (error) {
       console.error("Error updating student details:", error);
       alert("Failed to save changes to the database.");
+    }
+  };
+
+  // --- Handlers for Editing Marks ---
+  const handleEditMarksClick = (semIndex, subName, ext, int) => {
+    setEditingSubject({ 
+      semIndex, 
+      subName, 
+      ext: Number(ext) || 0, 
+      int: Number(int) || 0 
+    });
+  };
+
+  const handleSaveMarks = async () => {
+    if (!editingSubject) return;
+
+    try {
+      // Clone existing semesters
+      const updatedSemesters = [...selectedStudent.semesters];
+      
+      // Update specific subject marks
+      updatedSemesters[editingSubject.semIndex].subjects[editingSubject.subName] = {
+        ext: Number(editingSubject.ext) || 0,
+        int: Number(editingSubject.int) || 0
+      };
+
+      // Update Firebase database
+      const studentRef = doc(db, "students", selectedStudent.id);
+      await updateDoc(studentRef, { semesters: updatedSemesters });
+
+      // Update Local State UI instantly
+      const updatedStudent = { ...selectedStudent, semesters: updatedSemesters };
+      setSelectedStudent(updatedStudent);
+
+      if (setStudents) {
+         setStudents(prev => prev.map(s => s.id === selectedStudent.id ? updatedStudent : s));
+      }
+      
+      setEditingSubject(null); // Close editing mode
+    } catch (error) {
+      console.error("Error updating marks:", error);
+      alert("Failed to save marks to the database.");
     }
   };
 
@@ -214,23 +262,67 @@ const TeacherStudentScorecard = ({ students, setStudents }) => {
                           <thead className="bg-gray-50 text-gray-600 border-b border-gray-200">
                             <tr>
                               <th className="px-4 py-2 font-semibold">Subject</th>
-                              <th className="px-4 py-2 font-semibold">Ext</th>
-                              <th className="px-4 py-2 font-semibold">Int</th>
-                              <th className="px-4 py-2 font-semibold">Total</th>
-                              <th className="px-4 py-2 font-semibold">Grade</th>
+                              <th className="px-4 py-2 font-semibold w-24">Ext</th>
+                              <th className="px-4 py-2 font-semibold w-24">Int</th>
+                              <th className="px-4 py-2 font-semibold w-20">Total</th>
+                              <th className="px-4 py-2 font-semibold w-20">Grade</th>
+                              <th className="px-4 py-2 font-semibold w-24">Action</th>
                             </tr>
                           </thead>
                           <tbody>
                             {sem.subjects && Object.entries(sem.subjects).map(([subName, marks]) => {
-                              const total = (Number(marks.ext)||0) + (Number(marks.int)||0);
+                              const isEditingThis = editingSubject?.semIndex === idx && editingSubject?.subName === subName;
+                              
+                              const currentExt = isEditingThis ? editingSubject.ext : (marks.ext || 0);
+                              const currentInt = isEditingThis ? editingSubject.int : (marks.int || 0);
+                              const total = Number(currentExt) + Number(currentInt);
                               const { grade } = getGrade(total);
+
                               return (
                                 <tr key={subName} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
                                   <td className="px-4 py-2 font-medium text-gray-800">{subName}</td>
-                                  <td className="px-4 py-2">{marks.ext || 0}</td>
-                                  <td className="px-4 py-2 text-gray-500">{marks.int || 0}</td>
+                                  
+                                  <td className="px-4 py-2">
+                                    {isEditingThis ? (
+                                      <input 
+                                        type="number" 
+                                        value={editingSubject.ext} 
+                                        onChange={e => setEditingSubject({...editingSubject, ext: e.target.value})} 
+                                        className="w-16 border border-[#003366] px-2 py-1 rounded outline-none"
+                                      />
+                                    ) : marks.ext || 0}
+                                  </td>
+                                  
+                                  <td className="px-4 py-2">
+                                    {isEditingThis ? (
+                                      <input 
+                                        type="number" 
+                                        value={editingSubject.int} 
+                                        onChange={e => setEditingSubject({...editingSubject, int: e.target.value})} 
+                                        className="w-16 border border-[#003366] px-2 py-1 rounded outline-none"
+                                      />
+                                    ) : marks.int || 0}
+                                  </td>
+                                  
                                   <td className="px-4 py-2 font-bold">{total}</td>
                                   <td className="px-4 py-2 font-bold text-[#003366]">{grade}</td>
+                                  
+                                  <td className="px-4 py-2">
+                                    {isEditingThis ? (
+                                      <div className="flex gap-2 items-center">
+                                        <button onClick={handleSaveMarks} className="p-1 hover:bg-green-100 rounded text-green-700 transition-colors" title="Save Marks">
+                                          <Save className="w-4 h-4" />
+                                        </button>
+                                        <button onClick={() => setEditingSubject(null)} className="p-1 hover:bg-red-100 rounded text-red-700 transition-colors" title="Cancel">
+                                          <X className="w-4 h-4" />
+                                        </button>
+                                      </div>
+                                    ) : (
+                                      <button onClick={() => handleEditMarksClick(idx, subName, marks.ext, marks.int)} className="p-1 hover:bg-blue-100 rounded text-gray-400 hover:text-[#003366] transition-colors" title="Edit Marks">
+                                        <Edit3 className="w-4 h-4" />
+                                      </button>
+                                    )}
+                                  </td>
                                 </tr>
                               )
                             })}
