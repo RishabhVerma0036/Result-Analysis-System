@@ -7,7 +7,7 @@ const StudentPredictor = ({ student }) => {
 
   const safeSemesters = student?.semesters || [];
 
-  // --- DYNAMIC CGPA CALCULATOR (Same as Dashboard) ---
+  // --- DYNAMIC CGPA CALCULATOR ---
   let cgpaTotalPoints = 0;
   let cgpaTotalCredits = 0;
   
@@ -26,7 +26,8 @@ const StudentPredictor = ({ student }) => {
            else if (total >= 50) points = 6;
            else if (total >= 40) points = 5;
         }
-        const credits = 3;
+        // Dynamically fetch credits from database instead of hardcoding 3
+        const credits = Number(marks.credits) || 3; 
         cgpaTotalPoints += points * credits;
         cgpaTotalCredits += credits;
       });
@@ -43,7 +44,6 @@ const StudentPredictor = ({ student }) => {
     
     const semsCompleted = safeSemesters.length || 0;
     
-    // Now uses the dynamically calculated CGPA instead of the database '0'
     const requiredSgpa = (t * (semsCompleted + 1)) - (currentCgpa * semsCompleted);
     
     let message = '';
@@ -67,7 +67,6 @@ const StudentPredictor = ({ student }) => {
         <div className="flex-1 space-y-4">
           <div className="bg-gray-50 p-4 border rounded flex justify-between items-center">
              <span className="text-sm font-medium">Current Cumulative GPA</span>
-             {/* Displaying the newly calculated CGPA here */}
              <span className="text-lg font-bold text-[#003366] bg-white px-3 py-1 rounded shadow-sm">
                {currentCgpa.toFixed(2)}
              </span>

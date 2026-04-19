@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { getGrade } from "../../data/utils";
 import { doc, updateDoc } from "firebase/firestore";
 import { db } from "../../firebase";
-import { Save } from "lucide-react"; // Importing an icon for the save button
+import { Save } from "lucide-react"; 
 
 const StudentCalculator = ({ student }) => {
   const [selectedSemester, setSelectedSemester] = useState("");
@@ -10,11 +10,9 @@ const StudentCalculator = ({ student }) => {
   const [result, setResult] = useState(null);
   const [errorMsg, setErrorMsg] = useState('');
   
-  // States for save feedback
   const [isSaving, setIsSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
 
-  // 1. On initial load, set the default selected semester to the latest one
   useEffect(() => {
     if (student?.semesters && student.semesters.length > 0) {
       if (!selectedSemester) {
@@ -25,7 +23,6 @@ const StudentCalculator = ({ student }) => {
     }
   }, [student]);
 
-  // 2. Whenever the selected semester changes, load the corresponding subjects (AND RECALL ESTIMATES)
   useEffect(() => {
     if (!student?.semesters || !selectedSemester) return;
 
@@ -39,19 +36,17 @@ const StudentCalculator = ({ student }) => {
     }
 
     setErrorMsg("");
-    // RECALL LOGIC: Map through database subjects and pull saved estimates and credits if they exist
     const dbSubjects = Object.entries(currentSem.subjects).map(([name, data]) => ({
       name: name,
       actualTotal: (data.ext || 0) + (data.int || 0), 
-      credits: data.credits || 3, // Pull saved credits, default to 3
-      estimatedMarks: data.estimatedMarks || '' // Pull saved estimates, default to empty
+      credits: data.credits || 3, 
+      estimatedMarks: data.estimatedMarks || '' 
     }));
     
     setSubjects(dbSubjects);
     setResult(null); 
   }, [student, selectedSemester]);
 
-  // --- NEW SAVE FUNCTIONALITY ---
   const handleSaveEstimates = async () => {
     if (!student?.id) {
       setErrorMsg("Student ID missing. Cannot save data.");
@@ -65,17 +60,13 @@ const StudentCalculator = ({ student }) => {
     try {
       const studentRef = doc(db, "students", student.id);
       
-      // Rebuild the semesters array with the updated estimates
       const updatedSemesters = student.semesters.map(sem => {
         if (String(sem.sem) === String(selectedSemester)) {
-          // Copy the subjects object for this semester
           const updatedSubjects = { ...sem.subjects };
           
-          // Loop through our local UI state and apply the estimates back to the database object
           subjects.forEach(sub => {
             if (updatedSubjects[sub.name]) {
               updatedSubjects[sub.name].estimatedMarks = sub.estimatedMarks;
-              updatedSubjects[sub.name].credits = Number(sub.credits);
             }
           });
           
@@ -84,11 +75,10 @@ const StudentCalculator = ({ student }) => {
         return sem;
       });
 
-      // Save to Firebase
       await updateDoc(studentRef, { semesters: updatedSemesters });
       
       setSaveMessage("Estimates successfully saved to your profile!");
-      setTimeout(() => setSaveMessage(""), 4000); // Hide message after 4 seconds
+      setTimeout(() => setSaveMessage(""), 4000); 
     } catch (error) {
       console.error("Error saving estimates:", error);
       setErrorMsg("Failed to save estimates to the database.");
@@ -116,7 +106,6 @@ const StudentCalculator = ({ student }) => {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-300 pb-4 gap-4">
         <h2 className="text-xl font-semibold text-gray-800">SGPA Estimator & Actual Comparison</h2>
         
-        {/* Semester Selection Dropdown */}
         {student?.semesters && student.semesters.length > 0 && (
           <div className="flex items-center gap-3">
             <label className="font-bold text-gray-700 text-sm uppercase tracking-wide">Semester:</label>
@@ -172,11 +161,7 @@ const StudentCalculator = ({ student }) => {
                   
                   <div className="w-full sm:w-24 flex items-center gap-2">
                     <span className="sm:hidden text-xs font-bold text-gray-500 uppercase w-20">Credits:</span>
-                    <input type="number" min="1" max="6" value={sub.credits} onChange={(e) => {
-                      const newSubs = [...subjects];
-                      newSubs[idx].credits = e.target.value;
-                      setSubjects(newSubs);
-                    }} className="w-16 px-2 py-1 text-sm border border-gray-300 rounded outline-none" />
+                    <span className="px-2 py-1 text-sm font-semibold text-gray-700">{sub.credits}</span>
                   </div>
 
                   <div className="w-full sm:w-24 flex items-center gap-2 font-bold text-[#003366]">
@@ -186,11 +171,26 @@ const StudentCalculator = ({ student }) => {
 
                   <div className="w-full sm:w-32 flex items-center gap-2">
                     <span className="sm:hidden text-xs font-bold text-gray-500 uppercase w-20">Estimate:</span>
-                    <input type="number" min="0" max="100" placeholder="Estimate" value={sub.estimatedMarks} onChange={(e) => {
-                      const newSubs = [...subjects];
-                      newSubs[idx].estimatedMarks = e.target.value;
-                      setSubjects(newSubs);
-                    }} className="w-24 px-3 py-1.5 text-sm border border-blue-300 bg-blue-50 rounded outline-none focus:border-[#003366] focus:ring-1" />
+                    <input 
+                      type="number" 
+                      min="0" 
+                      max="100" 
+                      placeholder="Estimate" 
+                      value={sub.estimatedMarks} 
+                      onChange={(e) => {
+                        let val = e.target.value;
+                        // Add hard limit validation
+                        if (val !== "" && Number(val) > 100) {
+                          setErrorMsg(`Estimation for ${sub.name} cannot exceed 100.`);
+                          return; 
+                        }
+                        setErrorMsg(""); // clear error if valid
+                        const newSubs = [...subjects];
+                        newSubs[idx].estimatedMarks = val;
+                        setSubjects(newSubs);
+                      }} 
+                      className="w-24 px-3 py-1.5 text-sm border border-blue-300 bg-blue-50 rounded outline-none focus:border-[#003366] focus:ring-1" 
+                    />
                   </div>
 
                   <div className="w-full sm:w-24 flex items-center gap-2">
@@ -206,10 +206,7 @@ const StudentCalculator = ({ student }) => {
             })}
           </div>
 
-          {/* Action Buttons */}
           <div className="mt-6 flex flex-col sm:flex-row items-center gap-4 border-t border-gray-100 pt-6">
-            
-            {/* Save Estimates Button */}
             <button 
               onClick={handleSaveEstimates} 
               disabled={isSaving}
@@ -219,7 +216,6 @@ const StudentCalculator = ({ student }) => {
               {isSaving ? 'Saving...' : 'Save Estimates'}
             </button>
 
-            {/* Calculate Button */}
             <button 
               onClick={calculateGpa} 
               className="w-full sm:w-auto bg-[#003366] text-white px-6 py-2.5 text-sm font-medium rounded hover:bg-blue-900 shadow-sm ml-auto transition-colors"
