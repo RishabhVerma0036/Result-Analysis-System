@@ -138,14 +138,14 @@ const TeacherDashboard = ({ students }) => {
         <div className="flex gap-3 w-full sm:w-auto">
           
           {/* DYNAMIC DROPDOWN */}
-          <select value={filterClass} onChange={e => setFilterClass(e.target.value)} className="flex-1 sm:flex-none border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-[#003366] bg-white min-w-[140px] shadow-sm">
+          <select value={filterClass} onChange={e => setFilterClass(e.target.value)} className="flex-1 sm:flex-none border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-[#003366] bg-white min-w-140px shadow-sm">
             <option value="All">All Courses</option>
             {uniqueClasses.map(className => (
                <option key={className} value={className}>{className}</option>
             ))}
           </select>
 
-          <select value={filterSem} onChange={e => setFilterSem(e.target.value)} className="flex-1 sm:flex-none border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-[#003366] bg-white min-w-[120px] shadow-sm">
+          <select value={filterSem} onChange={e => setFilterSem(e.target.value)} className="flex-1 sm:flex-none border border-gray-300 rounded px-3 py-1.5 text-sm outline-none focus:border-[#003366] bg-white min-w-120px shadow-sm">
             <option value="All">All / Latest Sems</option>
             {[1, 2, 3, 4, 5, 6, 7, 8].map(s => <option key={s} value={s}>Semester {s}</option>)}
           </select>

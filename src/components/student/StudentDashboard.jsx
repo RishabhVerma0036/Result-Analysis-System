@@ -165,7 +165,7 @@ const StudentDashboard = ({ student }) => {
           {/* Edit & Upload Buttons have been completely removed from here */}
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm border-collapse min-w-[600px]">
+          <table className="w-full text-left text-sm border-collapse min-w-600px">
             <thead className="bg-white text-gray-600 border-b border-gray-300">
               <tr>
                 <th className="px-5 py-3 font-medium border-r border-gray-100">Subject</th>
