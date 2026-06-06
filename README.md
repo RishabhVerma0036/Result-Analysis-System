@@ -24,12 +24,64 @@ An automated web application designed to process, analyze, and visualize academi
 ##  Project Directory Structure
 
 ```text
-├── src/
-│   ├── components/     # Reusable UI components (Charts, Tables, Navbar)
-│   ├── assets/         # Images, icons, and static styling configuration
-│   ├── App.jsx         # Main application component
-│   └── main.jsx        # Application entry point
-├── index.html          # HTML entry point
-├── tailwind.config.js  # Tailwind CSS configuration layout
-├── vite.config.js      # Vite build configuration
-└── package.json        # Project dependencies and scripts
+result-analysis-system
+│
+├── .firebase
+│   └── hosting.ZGlzdA.cache
+│
+├── .firebaserc
+├── .gitignore
+├── README.md
+├── eslint.config.js
+├── firebase.json
+├── index.html
+├── package-lock.json
+├── package.json
+├── vite.config.js
+│
+├── public
+│   ├── favicon.svg
+│   └── icons.svg
+│
+└── src
+    │
+    ├── App.css
+    ├── App.jsx
+    ├── firebase.js
+    ├── index.css
+    ├── main.jsx
+    │
+    ├── assets
+    │   ├── favicon.png
+    │   ├── hero.png
+    │   ├── react.svg
+    │   └── vite.svg
+    │
+    ├── components
+    │   │
+    │   ├── auth
+    │   │   └── LoginScreen.jsx
+    │   │
+    │   ├── common
+    │   │   ├── AlertMessage.jsx
+    │   │   ├── Sidebar.jsx
+    │   │   └── Topbar.jsx
+    │   │
+    │   ├── student
+    │   │   ├── StudentCalculator.jsx
+    │   │   ├── StudentDashboard.jsx
+    │   │   ├── StudentPredictor.jsx
+    │   │   └── StudentProfile.jsx
+    │   │
+    │   └── teacher
+    │       ├── TeacherDashboard.jsx
+    │       ├── TeacherDataManagement.jsx
+    │       └── TeacherStudentScorecard.jsx
+    │
+    ├── data
+    │   ├── students.js
+    │   └── utils.js
+    │
+    └── pages
+        ├── StudentPage.jsx
+        └── TeacherPage.jsx
